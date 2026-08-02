@@ -380,6 +380,9 @@ class BrowserConfig:
                         Default: [].
         headers (dict): Extra HTTP headers to apply to all requests in this context.
                         Default: {}.
+        skip_default_headers (bool): Preserve the browser's native User-Agent and
+                                     client hints instead of applying Crawl4AI defaults.
+                                     Default: False.
         user_agent (str): Custom User-Agent string to use. Default: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36".
         user_agent_mode (str or None): Mode for generating the user agent (e.g., "random"). If None, use the provided
@@ -420,6 +423,7 @@ class BrowserConfig:
         verbose: bool = True,
         cookies: list = None,
         headers: dict = None,
+        skip_default_headers: bool = False,
         user_agent: str = (
             # "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) AppleWebKit/537.36 "
             # "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -468,6 +472,7 @@ class BrowserConfig:
         self.java_script_enabled = java_script_enabled
         self.cookies = cookies if cookies is not None else []
         self.headers = headers if headers is not None else {}
+        self.skip_default_headers = skip_default_headers
         self.user_agent = user_agent
         self.user_agent_mode = user_agent_mode
         self.user_agent_generator_config = user_agent_generator_config
@@ -489,7 +494,8 @@ class BrowserConfig:
             pass
 
         self.browser_hint = UAGen.generate_client_hints(self.user_agent)
-        self.headers.setdefault("sec-ch-ua", self.browser_hint)
+        if not self.skip_default_headers:
+            self.headers.setdefault("sec-ch-ua", self.browser_hint)
 
         # Set appropriate browser management flags based on browser_mode
         if self.browser_mode == "builtin":
@@ -541,6 +547,7 @@ class BrowserConfig:
             java_script_enabled=kwargs.get("java_script_enabled", True),
             cookies=kwargs.get("cookies", []),
             headers=kwargs.get("headers", {}),
+            skip_default_headers=kwargs.get("skip_default_headers", False),
             user_agent=kwargs.get(
                 "user_agent",
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -578,6 +585,7 @@ class BrowserConfig:
             "java_script_enabled": self.java_script_enabled,
             "cookies": self.cookies,
             "headers": self.headers,
+            "skip_default_headers": self.skip_default_headers,
             "user_agent": self.user_agent,
             "user_agent_mode": self.user_agent_mode,
             "user_agent_generator_config": self.user_agent_generator_config,

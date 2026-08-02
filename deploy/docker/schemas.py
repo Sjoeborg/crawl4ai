@@ -4,8 +4,14 @@ from pydantic import BaseModel, Field
 from utils import FilterType
 
 
+class BrowserBackend(str, Enum):
+    CHROMIUM = "chromium"
+    CLOAK = "cloak"
+
+
 class CrawlRequest(BaseModel):
     urls: List[str] = Field(min_length=1, max_length=100)
+    browser_backend: BrowserBackend = BrowserBackend.CHROMIUM
     browser_config: Optional[Dict] = Field(default_factory=dict)
     crawler_config: Optional[Dict] = Field(default_factory=dict)
 

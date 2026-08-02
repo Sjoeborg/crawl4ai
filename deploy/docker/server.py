@@ -442,6 +442,7 @@ async def crawl(
         browser_config=crawl_request.browser_config,
         crawler_config=crawl_request.crawler_config,
         config=config,
+        browser_backend=crawl_request.browser_backend,
     )
     return JSONResponse(res)
 
@@ -460,6 +461,7 @@ async def crawl_stream(
         browser_config=crawl_request.browser_config,
         crawler_config=crawl_request.crawler_config,
         config=config,
+        browser_backend=crawl_request.browser_backend,
     )
     return StreamingResponse(
         stream_results(crawler, gen),

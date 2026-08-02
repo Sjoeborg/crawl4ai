@@ -206,6 +206,50 @@ The `docker-compose.yml` file in the project root provides a simplified approach
 
 > The server will be available at `http://localhost:11235`.
 
+#### Optional CloakBrowser sidecar
+
+The `docker-compose.cloak.yml` overlay adds a CloakBrowser CDP sidecar without
+publishing its privileged debugging port to the host:
+
+```bash
+export CLOAKBROWSER_LICENSE_KEY=cb_xxx  # Optional for binaries that do not require a key
+docker compose -f docker-compose.yml -f docker-compose.cloak.yml up -d
+```
+
+Select it per crawl with the trusted `browser_backend` name:
+
+```json
+{
+  "urls": ["https://example.com"],
+  "browser_backend": "cloak",
+  "browser_config": {
+    "type": "BrowserConfig",
+    "params": {
+      "viewport_width": 1920,
+      "viewport_height": 1080
+    }
+  },
+  "crawler_config": {
+    "type": "CrawlerRunConfig",
+    "params": {
+      "cache_mode": "bypass"
+    }
+  }
+}
+```
+
+Clients cannot provide the sidecar CDP URL. The overlay supplies the trusted
+internal endpoint with `CLOAKBROWSER_CDP_URL`; the regular Compose deployment
+leaves the backend unavailable. Crawl4AI also preserves CloakBrowser's native
+User-Agent/client hints and disables its own navigator, simulation, and
+`magic` identity patches for these requests.
+
+This is an integration example, not a production stealth guarantee. Pin the
+CloakBrowser image, size concurrency conservatively, protect the Crawl4AI API,
+and review CloakBrowser's binary and OEM/SaaS licensing before deployment.
+Process-level options such as headed mode, proxies, fingerprint seeds, and
+license tier belong on the sidecar rather than in `browser_config`.
+
 #### 4. Stopping the Service
 
 ```bash

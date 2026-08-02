@@ -12,6 +12,7 @@ from api import (
     handle_crawl_job,
     handle_task_status,
 )
+from schemas import BrowserBackend
 
 # ------------- dependency placeholders -------------
 _redis = None        # will be injected from server.py
@@ -41,6 +42,7 @@ class LlmJobPayload(BaseModel):
 
 class CrawlJobPayload(BaseModel):
     urls:           list[HttpUrl]
+    browser_backend: BrowserBackend = BrowserBackend.CHROMIUM
     browser_config: Dict = {}
     crawler_config: Dict = {}
 
@@ -89,6 +91,7 @@ async def crawl_job_enqueue(
         payload.browser_config,
         payload.crawler_config,
         config=_config,
+        browser_backend=payload.browser_backend,
     )
 
 

@@ -810,7 +810,7 @@ class BrowserManager:
                 ] = self.config.downloads_path
 
         # Handle user agent and browser hints
-        if self.config.user_agent:
+        if self.config.user_agent and not self.config.skip_default_headers:
             combined_headers = {
                 "User-Agent": self.config.user_agent,
                 "sec-ch-ua": self.config.browser_hint,
@@ -913,7 +913,6 @@ class BrowserManager:
 
         # Common context settings
         context_settings = {
-            "user_agent": user_agent,
             "viewport": viewport_settings,
             "proxy": proxy_settings,
             "accept_downloads": self.config.accept_downloads,
@@ -922,6 +921,8 @@ class BrowserManager:
             "device_scale_factor": 1.0,
             "java_script_enabled": self.config.java_script_enabled,
         }
+        if not self.config.skip_default_headers:
+            context_settings["user_agent"] = user_agent
         
         if crawlerRunConfig:
             # Check if there is value for crawlerRunConfig.proxy_config set add that to context

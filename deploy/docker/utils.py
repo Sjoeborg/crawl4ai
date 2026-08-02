@@ -36,6 +36,14 @@ def load_config() -> Dict:
     if llm_api_key and "api_key" not in config["llm"]:
         config["llm"]["api_key"] = llm_api_key
         logging.info("LLM API key loaded from LLM_API_KEY environment variable")
+
+    # A client may select this named backend, but only the server controls its
+    # CDP endpoint. The Compose sidecar overlay sets this variable.
+    cloak_cdp_url = os.environ.get("CLOAKBROWSER_CDP_URL")
+    if cloak_cdp_url:
+        config["crawler"].setdefault("browser_backends", {})["cloak"] = {
+            "cdp_url": cloak_cdp_url
+        }
     
     return config
 

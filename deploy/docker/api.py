@@ -415,11 +415,71 @@ async def stream_results(crawler: AsyncWebCrawler, results_gen: AsyncGenerator) 
         #     logger.error(f"Crawler cleanup error: {e}")
         pass
 
+def resolve_browser_config(
+    browser_config: dict,
+    browser_backend: str,
+    config: dict,
+) -> BrowserConfig:
+    """Resolve a client-selected browser backend without trusting a client CDP URL."""
+    resolved = BrowserConfig.load(browser_config)
+    backend = getattr(browser_backend, "value", browser_backend)
+
+    if backend == "chromium":
+        return resolved
+    if backend != "cloak":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported browser backend: {backend}",
+        )
+
+    cloak = config.get("crawler", {}).get("browser_backends", {}).get("cloak", {})
+    cdp_url = cloak.get("cdp_url")
+    if not cdp_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "The CloakBrowser backend is not configured. "
+                "Set CLOAKBROWSER_CDP_URL on the Crawl4AI service."
+            ),
+        )
+
+    # The sidecar owns process-level settings. Never accept a client-provided
+    # endpoint, proxy, profile directory, launch arguments, or stealth wrapper.
+    resolved.browser_type = "chromium"
+    resolved.browser_mode = "custom"
+    resolved.use_managed_browser = True
+    resolved.cdp_url = cdp_url
+    resolved.use_persistent_context = False
+    resolved.user_data_dir = None
+    resolved.proxy = None
+    resolved.proxy_config = None
+    resolved.extra_args = []
+    resolved.enable_stealth = False
+
+    # Let CloakBrowser report its coherent native identity. Custom non-identity
+    # headers remain supported.
+    resolved.skip_default_headers = True
+    resolved.headers = {
+        key: value
+        for key, value in resolved.headers.items()
+        if key.lower() not in {"user-agent", "sec-ch-ua"}
+    }
+    return resolved
+
+
+def preserve_cloak_identity(crawler_config: CrawlerRunConfig) -> None:
+    """Disable Crawl4AI JavaScript identity patches for CloakBrowser crawls."""
+    crawler_config.override_navigator = False
+    crawler_config.simulate_user = False
+    crawler_config.magic = False
+
+
 async def handle_crawl_request(
     urls: List[str],
     browser_config: dict,
     crawler_config: dict,
-    config: dict
+    config: dict,
+    browser_backend: str = "chromium",
 ) -> dict:
     """Handle non-streaming crawl requests."""
     start_mem_mb = _get_memory_mb() # <--- Get memory before
@@ -429,7 +489,9 @@ async def handle_crawl_request(
     
     try:
         urls = [('https://' + url) if not url.startswith(('http://', 'https://')) and not url.startswith(("raw:", "raw://")) else url for url in urls]
-        browser_config = BrowserConfig.load(browser_config)
+        browser_config = resolve_browser_config(
+            browser_config, browser_backend, config
+        )
         crawler_config = CrawlerRunConfig.load(crawler_config)
 
         dispatcher = MemoryAdaptiveDispatcher(
@@ -450,6 +512,8 @@ async def handle_crawl_request(
         for key, value in base_config.items():
             if hasattr(crawler_config, key):
                 setattr(crawler_config, key, value)
+        if getattr(browser_backend, "value", browser_backend) == "cloak":
+            preserve_cloak_identity(crawler_config)
 
         results = []
         func = getattr(crawler, "arun" if len(urls) == 1 else "arun_many")
@@ -486,6 +550,8 @@ async def handle_crawl_request(
             "server_peak_memory_mb": peak_mem_mb
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Crawl error: {str(e)}", exc_info=True)
         if 'crawler' in locals() and crawler.ready: # Check if crawler was initialized and started
@@ -513,14 +579,19 @@ async def handle_stream_crawl_request(
     urls: List[str],
     browser_config: dict,
     crawler_config: dict,
-    config: dict
+    config: dict,
+    browser_backend: str = "chromium",
 ) -> Tuple[AsyncWebCrawler, AsyncGenerator]:
     """Handle streaming crawl requests."""
     try:
-        browser_config = BrowserConfig.load(browser_config)
+        browser_config = resolve_browser_config(
+            browser_config, browser_backend, config
+        )
         # browser_config.verbose = True # Set to False or remove for production stress testing
         browser_config.verbose = False
         crawler_config = CrawlerRunConfig.load(crawler_config)
+        if getattr(browser_backend, "value", browser_backend) == "cloak":
+            preserve_cloak_identity(crawler_config)
         crawler_config.scraping_strategy = LXMLWebScrapingStrategy()
         crawler_config.stream = True
 
@@ -545,6 +616,8 @@ async def handle_stream_crawl_request(
 
         return crawler, results_gen
 
+    except HTTPException:
+        raise
     except Exception as e:
         # Make sure to close crawler if started during an error here
         if 'crawler' in locals() and crawler.ready:
@@ -567,6 +640,7 @@ async def handle_crawl_job(
     browser_config: Dict,
     crawler_config: Dict,
     config: Dict,
+    browser_backend: str = "chromium",
 ) -> Dict:
     """
     Fire-and-forget version of handle_crawl_request.
@@ -589,6 +663,7 @@ async def handle_crawl_job(
                 browser_config=browser_config,
                 crawler_config=crawler_config,
                 config=config,
+                browser_backend=browser_backend,
             )
             await redis.hset(f"task:{task_id}", mapping={
                 "status": TaskStatus.COMPLETED,

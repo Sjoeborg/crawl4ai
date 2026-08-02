@@ -1,0 +1,26 @@
+services:
+  crawl4ai:
+    environment:
+      - CLOAKBROWSER_CDP_URL=http://cloakbrowser:9222
+    depends_on:
+      cloakbrowser:
+        condition: service_healthy
+
+  cloakbrowser:
+    image: ${CLOAKBROWSER_IMAGE:-cloakhq/cloakbrowser:latest}
+    command: ["cloakserve", "--idle-timeout=300"]
+    environment:
+      - CLOAKBROWSER_LICENSE_KEY=${CLOAKBROWSER_LICENSE_KEY:-}
+    shm_size: "1gb"
+    volumes:
+      - cloakbrowser-cache:/root/.cloakbrowser
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9222/json/version"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+volumes:
+  cloakbrowser-cache:
